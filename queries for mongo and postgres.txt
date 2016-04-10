@@ -1,0 +1,53 @@
+
+1)
+this script is for importing the JSON files to MongoDB:
+
+@echo off
+@echo %time%
+
+for %f in (C:\Users\malmukay\Documents\CSE591\*.json) do (
+mongoimport --host localhost:27017 --db cse --quiet --collection tweets < %f
+
+)
+@echo %time%
+
+-----------------------------------
+2)
+expoting the data in one big file:
+
+mongoexport --db cse --collection tweets --type=json --fields (TweetID,Text,Latitude,Longitude) --out allTweets.json
+
+mongoexport --db cse --collection tweets --type=json --fields (TweetID,Text,Latitude,Longitude) --query "{Latitude: {$gt: -1}}" --out geo_tagged_tweets.json
+
+
+
+-----------------------------------
+3) 
+before loading data to Posgres and MongoDB, apply these changes on the text so the json data validation run smoothly with no errors
+
+replace \"} with \""}
+replace \" with
+replace \ with
+
+-----------------------------------
+
+4)
+if the file cannot be opened on Notepad++, try this:
+
+copy "Tweets" 
+from 'C:\Program Files\PostgreSQL\9.5\share\allTweets.json' 
+csv quote e'\x01' delimiter e'\x02';
+
+-----------------------------------
+5) 
+if 3 works, load data into postgres and mongodb
+
+Postgres:
+copy "Tweets" FROM 'C:\Program Files\PostgreSQL\9.5\share\allTweets.json';
+copy "Geo_tagged_Tweets" FROM 'C:\Program Files\PostgreSQL\9.5\share\geo_tagged_tweets.json';
+
+Mongo:
+mongoimport --host localhost:27017 --db cse --collection tweets --type json < C:\Program Files\PostgreSQL\9.5\share\allTweets.json
+mongoimport --host localhost:27017 --db cse --collection tweets --type json < C:\Program Files\PostgreSQL\9.5\share\geo_tagged_tweets.json
+
+
