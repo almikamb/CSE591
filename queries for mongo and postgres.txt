@@ -15,9 +15,9 @@ mongoimport --host localhost:27017 --db cse --quiet --collection tweets < %f
 2)
 expoting the data in one big file:
 
-mongoexport --db cse --collection tweets --type=json --fields (TweetID,Text,Latitude,Longitude) --out allTweets.json
+mongoexport --db cse --collection tweets --type=json --fields TweetID,Text,Latitude,Longitude --out allTweets.json
 
-mongoexport --db cse --collection tweets --type=json --fields (TweetID,Text,Latitude,Longitude) --query "{Latitude: {$gt: -1}}" --out geo_tagged_tweets.json
+mongoexport --db cse --collection tweets --type=json --fields TweetID,Text,Latitude,Longitude --query "{Latitude: {$ne: -1}}" --out geo_tagged_tweets3.json
 
 
 
@@ -35,7 +35,7 @@ replace \ with
 if the file cannot be opened on Notepad++, try this:
 
 	copy "Tweets" 
-	from 'C:\Program Files\PostgreSQL\9.5\share\allTweets.json' 
+	from 'path\file name.json' 
 	csv quote e'\x01' delimiter e'\x02';
 
 -----------------------------------
