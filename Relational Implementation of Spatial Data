@@ -57,7 +57,7 @@ CREATE INDEX idnx_elections_geom ON tweets_relational_elections USING GIST ( geo
 SELECT *,ST_Distance(geom,ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) 
 FROM tweets_relational_elections
 ORDER BY
-tweets_relational_elections.geom <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geometry
+tweets_relational_elections.geom <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
 limit 10;
 
 -------------------------- Range Query --------------------------------------------------------
@@ -66,7 +66,7 @@ SELECT *,ST_Distance(geom,ST_GeographyFromText('POINT(-111.9211234 33.4212026)')
 FROM tweets_relational_elections
 WHERE ST_Distance(geom,ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) < 100000
 ORDER BY
-tweets_relational_elections.geom <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geometry
+tweets_relational_elections.geom <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
 
 --------------------------- KNN + Textual ----------------------------------------------------
 
@@ -74,7 +74,7 @@ SELECT *,ST_Distance(geom,ST_GeographyFromText('POINT(-111.9211234 33.4212026)')
 FROM tweets_relational_elections
 WHERE text Ilike '%trump%'
 ORDER BY
-tweets_relational_elections.geom <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geometry
+tweets_relational_elections.geom <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
 limit 10;
 --------------------------- Range + Textual --------------------------------------------------
 
@@ -82,7 +82,7 @@ SELECT *,ST_Distance(geom,ST_GeographyFromText('POINT(-111.9211234 33.4212026)')
 FROM tweets_relational_elections
 WHERE ST_Distance(geom,ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) < 100000 and text Ilike '%trump%'
 ORDER BY
-tweets_relational_elections.geom <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geometry
+tweets_relational_elections.geom <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
 
 ---------------------------------------------------------------------------------------------------------------------------------------------------
 --miscellaneous queries for sample testing
