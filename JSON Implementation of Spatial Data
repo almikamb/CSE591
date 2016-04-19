@@ -1,0 +1,92 @@
+-------------------------- Using JSON Datatype and B-Tree Index-------------------------------
+create table tweets_elections_J(ID SERIAL, tweet json);
+
+Insert into tweets_elections_J(tweet) SELECT row_to_json(jg)
+ FROM (SELECT ST_AsGeoJSON(tre.geom)::json As geometry
+    , text as text
+   FROM tweets_relational_elections tre)  As jg;
+
+select * from tweets_elections_J
+
+CREATE INDEX idnx_elections_geom_J on tweets_elections_J ((tweet #>> '{geometry,text}'));
+
+---------------------------------Using JSONB Datatype and GIN Index---------------------------------
+
+create table tweets_elections_JB(ID SERIAL, tweet jsonb);
+
+insert into tweets_elections_JB(tweet) SELECT row_to_json(fc)
+ FROM (SELECT ST_AsGeoJSON(tre.geom)::json As geometry
+    , text as text
+   FROM tweets_relational_elections tre)  As fc;
+
+
+
+select * from tweets_elections_JB
+
+
+CREATE INDEX idnx_elections_geom_JB on tweets_elections_JB USING GIN (tweet);
+
+
+--------------------------- KNN Query --------------------------------------------------------
+
+SELECT *,ST_Distance(geography(ST_GeomFromGeoJSON(tweet->>'geometry')),ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) 
+FROM tweets_elections_J
+ORDER BY
+geography(ST_GeomFromGeoJSON(tweet->>'geometry')) <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
+limit 10;
+
+SELECT *,ST_Distance(geography(ST_GeomFromGeoJSON(tweet->>'geometry')),ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) 
+FROM tweets_elections_JB
+ORDER BY
+geography(ST_GeomFromGeoJSON(tweet->>'geometry')) <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
+limit 10;
+
+-------------------------- Range Query --------------------------------------------------------
+
+SELECT *,ST_Distance(geography(ST_GeomFromGeoJSON(tweet->>'geometry')),ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) 
+FROM tweets_elections_J
+WHERE ST_Distance(geography(ST_GeomFromGeoJSON(tweet->>'geometry')),ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) <100000 
+ORDER BY
+geography(ST_GeomFromGeoJSON(tweet->>'geometry')) <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
+
+SELECT *,ST_Distance(geography(ST_GeomFromGeoJSON(tweet->>'geometry')),ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) 
+FROM tweets_elections_JB
+WHERE ST_Distance(geography(ST_GeomFromGeoJSON(tweet->>'geometry')),ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) <100000 
+ORDER BY
+geography(ST_GeomFromGeoJSON(tweet->>'geometry')) <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
+
+
+
+--------------------------- KNN + Textual ----------------------------------------------------
+
+SELECT *,ST_Distance(geography(ST_GeomFromGeoJSON(tweet->>'geometry')),ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) 
+FROM tweets_elections_J
+WHERE tweet->>'text' Ilike '%trump%'
+ORDER BY
+geography(ST_GeomFromGeoJSON(tweet->>'geometry')) <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
+limit 10;
+
+SELECT *,ST_Distance(geography(ST_GeomFromGeoJSON(tweet->>'geometry')),ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) 
+FROM tweets_elections_JB
+WHERE tweet->>'text' Ilike '%trump%'
+ORDER BY
+geography(ST_GeomFromGeoJSON(tweet->>'geometry')) <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
+limit 10;
+
+
+--------------------------- Range + Textual --------------------------------------------------
+
+SELECT *,ST_Distance(geography(ST_GeomFromGeoJSON(tweet->>'geometry')),ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) 
+FROM tweets_elections_J
+WHERE ST_Distance(geography(ST_GeomFromGeoJSON(tweet->>'geometry')),ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) <100000 
+AND tweet->>'text' Ilike '%trump%'
+ORDER BY
+geography(ST_GeomFromGeoJSON(tweet->>'geometry')) <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
+
+SELECT *,ST_Distance(geography(ST_GeomFromGeoJSON(tweet->>'geometry')),ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) 
+FROM tweets_elections_JB
+WHERE ST_Distance(geography(ST_GeomFromGeoJSON(tweet->>'geometry')),ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) <100000 
+AND tweet->>'text' Ilike '%trump%'
+ORDER BY
+geography(ST_GeomFromGeoJSON(tweet->>'geometry')) <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
+
