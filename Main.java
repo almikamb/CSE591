@@ -48,10 +48,10 @@ public class Main {
 		// arg1 = 50000;
 		ConfigurationBuilder cb = new ConfigurationBuilder();
 		cb.setDebugEnabled(true);
-		cb.setOAuthConsumerKey("yJNBMPjrLS7shZZWiLUzYQ");
-		cb.setOAuthConsumerSecret("hqBTCRM1zD8lOo63GO6p7IWEX8R8n37b5GuJ9utXtY");
-		cb.setOAuthAccessToken("2177078886-Xu7pRSYjY9upnePOSr9vLr2EBTup3txPx79NgnX");
-		cb.setOAuthAccessTokenSecret("bH7QavkQbDGeuDg6tRMdBD8l6ekgks5YZa263EZxaBBu0");
+		cb.setOAuthConsumerKey("");
+		cb.setOAuthConsumerSecret("");
+		cb.setOAuthAccessToken("");
+		cb.setOAuthAccessTokenSecret("");
 		cb.setJSONStoreEnabled(true);
 		TwitterStream twitterStream = new TwitterStreamFactory(cb.build()).getInstance();
 		StatusListener listener = new StatusListener() {

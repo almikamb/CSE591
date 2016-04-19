@@ -34,9 +34,15 @@ replace \ with
 4)
 if the file cannot be opened on Notepad++, try this:
 
+<<<<<<< HEAD
 	copy "Tweets" 
 	from 'path\file name.json' 
 	csv quote e'\x01' delimiter e'\x02';
+=======
+copy "Tweets" 
+from 'C:\Program Files\PostgreSQL\9.5\share\allTweets.json' 
+csv quote e'\x01' delimiter e'\x02';
+>>>>>>> parent of 7bc653f... updated
 
 -----------------------------------
 5) 
@@ -47,17 +53,7 @@ copy "Tweets" FROM 'C:\Program Files\PostgreSQL\9.5\share\allTweets.json';
 copy "Geo_tagged_Tweets" FROM 'C:\Program Files\PostgreSQL\9.5\share\geo_tagged_tweets.json';
 
 Mongo:
-@echo off
-@echo %time% 
-mongoimport --host localhost:27017 --db cse591 --quiet  --collection tweets < C:\Users\malmukay\allTweets.json
-@echo %time%
-
-@echo off
-@echo %time% 
-mongoimport --host localhost:27017 --db  cse591 --quiet --collection tweets --type json < C:\Users\malmukay\geo_tagged_tweets.json
-@echo %time%
-
-
-
+mongoimport --host localhost:27017 --db cse --collection tweets --type json < C:\Program Files\PostgreSQL\9.5\share\allTweets.json
+mongoimport --host localhost:27017 --db cse --collection tweets --type json < C:\Program Files\PostgreSQL\9.5\share\geo_tagged_tweets.json
 
 
