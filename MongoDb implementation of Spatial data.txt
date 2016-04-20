@@ -1,0 +1,83 @@
+
+db.new_tweets.find()
+
+
+--------------- Make the coordinates in one array and save it into the "Longitude" attribute ------------------
+
+db.new_tweets.find().forEach(function(doc){
+var location = {"type":"Point","coordinates":[doc.Longitude,doc.Latitude]};
+db.new_tweets.update({"_id":doc._id},{$set:{"Longitude":location}});
+})
+
+
+----------------- Create a a 2d Index ----------------------------------------------------------------------
+
+//db.new_tweets.createIndex( {"Longitude" : "2d"} )
+db.new_tweets.createIndex( {"Longitude" : "2dsphere"} )
+
+
+db.new_tweets.dropIndex("coordinates_2d")
+db.new_tweets.getIndexes()
+
+------------------ Range Query -----------------------------------------------------------------------------
+
+
+// 250 mile 
+
+db.new_tweets.find( { "Longitude": { $geoWithin :
+                          { $center : [ [-111.9211234, 33.4212026 ] , 250 / 3963.2 ]   
+                } } } ).pretty()
+				
+--------------------------- KNN Query --------------------------------------------------------
+
+//1000000 meter
+
+db.new_tweets.find( { "Longitude": { $near :
+		{
+			$geometry : {
+				type : "Point" ,
+				coordinates : [-111.9211234, 33.4212026 ] },
+			$maxDistance : 1000000
+		}
+	}
+}
+).limit(100).pretty()
+
+	   
+or 
+
+db.new_tweets.find( { "Longitude": { $geoNear :
+		{
+			$geometry : {
+				type : "Point" ,
+				coordinates : [-111.9211234, 33.4212026 ] },
+			$maxDistance : 1000000
+		}
+	}
+}
+).limit(100).pretty()
+
+
+--------------------------- KNN + Textual ----------------------------------------------------
+
+
+
+db.new_tweets.aggregate([
+   {
+     $geoNear: {
+        near: { type: "Point", coordinates: [ -111.9211234, 33.4212026 ] },
+        distanceField: "Longitude",
+        maxDistance: 1000000,
+        query: {Text: {$regex: 'Trump'}},
+		spherical: true,
+		num: 10
+        
+     }
+   }
+]).pretty()
+
+
+--------------------------- Range + Textual --------------------------------------------------
+
+db.new_tweets.find( { $and: [{ "Longitude": { $geoWithin : { $center : [ [-111.9211234, 33.4212026 ] , 1000 / 3963.2 ]   } } }, {Text: {$regex: 'Trump'}} ]}).pretty()
+						  
