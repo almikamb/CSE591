@@ -1,0 +1,169 @@
+
+
+CREATE EXTENSION postgis;
+
+CREATE EXTENSION postgis_topology;
+-- Enable PostGIS Advanced 3D 
+-- and other geoprocessing algorithms
+CREATE EXTENSION postgis_sfcgal;
+-- fuzzy matching needed for Tiger
+CREATE EXTENSION fuzzystrmatch;
+-- rule based standardizer
+CREATE EXTENSION address_standardizer;
+-- example rule data set
+CREATE EXTENSION address_standardizer_data_us;
+-- Enable US Tiger Geocoder
+CREATE EXTENSION postgis_tiger_geocoder;
+-- routing functionality
+CREATE EXTENSION pgrouting;
+-- spatial foreign data wrappers
+CREATE EXTENSION ogr_fdw;
+
+-- LIDAR support
+CREATE EXTENSION pointcloud;
+-- LIDAR Point cloud patches to geometry type cases
+CREATE EXTENSION pointcloud_postgis;
+
+--------------------------------------------------------------------------------------------------------------------
+
+
+create table tweets_elections(id SERIAL,tweet json);
+
+create table tweets_elections_nongeo(id SERIAL,tweet json);
+
+copy tweets_elections(tweet) 
+    from 'C:\Program Files (x86)\PostgreSQL\geotagged_elections_tweets2.json' 
+    csv quote e'\x01' delimiter e'\x02';
+
+
+copy tweets_elections_nongeo(tweet) 
+    from 'C:\Program Files (x86)\PostgreSQL\all_elections_tweets2.json' 
+    csv quote e'\x01' delimiter e'\x02';
+
+
+
+select * from tweets_elections 
+
+select count(1) from tweets_elections_nongeo
+----------------------------------------------------------------------------------------------------------------------
+drop table tweets_relational_elections_nongeo
+
+-----------------Creating a relation table for geo data from json format---------------------------------------
+
+select cast(UserID as bigint) as UserID,Latitude,Longitude,text 
+into tweets_relational_elections_geo
+from 
+(
+select tweet->'UserID'->>'$numberLong' as UserID ,cast(tweet->>'Latitude' as text) as Latitude,cast(tweet->>'Longitude' as text) as Longitude, cast(tweet->>'Text' as text) as text 
+from tweets_elections
+where tweet->'UserID'->>'$numberLong' is NOT NULL
+Union all
+select tweet->>'UserID' as UserID ,cast(tweet->>'Latitude' as text) as Latitude,cast(tweet->>'Longitude' as text) as Longitude, cast(tweet->>'Text' as text) as text 
+from tweets_elections
+where tweet->>'UserID' not like '{%'
+)X
+
+
+
+------------- Creating a relational table for non-geo data from json format ----------------------------------
+select cast(UserID as bigint) as UserID,Latitude,Longitude,text 
+into tweets_relational_elections_nongeo
+from 
+(
+select tweet->'UserID'->>'$numberLong' as UserID ,cast(tweet->>'Latitude' as text) as Latitude,cast(tweet->>'Longitude' as text) as Longitude, cast(tweet->>'Text' as text) as text 
+from tweets_elections_nongeo
+where tweet->'UserID'->>'$numberLong' is NOT NULL
+Union all
+select tweet->>'UserID' as UserID ,cast(tweet->>'Latitude' as text) as Latitude,cast(tweet->>'Longitude' as text) as Longitude, cast(tweet->>'Text' as text) as text 
+from tweets_elections_nongeo
+where tweet->>'UserID' not like '{%'
+)X
+
+
+ALTER TABLE tweets_relational_elections_geo
+  ADD COLUMN geom geography(Point,4326); 
+
+UPDATE tweets_relational_elections_geo SET geom = ST_PointFromText ('POINT(' || longitude || ' ' || latitude || ')' , 4326 ) ;
+
+-------------- Creating a temp table with distinct UserID from geo relational table for joining it with non geo table and get location coordinates for rows in non geo table-- 
+SELECT UserID,Latitude,Longitude,text,geom into tweets_relational_elections_geo_distinct from (
+SELECT UserID, Latitude,Longitude,text,geom, row_number() OVER (PARTITION BY UserID ORDER BY geom <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography ASC) as rank FROM tweets_relational_elections_geo) Y
+where Y.rank=1
+
+
+select count(1) from tweets_relational_elections_geo_distinct
+
+drop table tweets_relational_elections_Duplicates
+
+---------------- Intermediate table which gives all records with geo location coordinates for
+
+Select UserID, Latitude, Longitude, Text, geom into tweets_relational_elections_Duplicates from(
+Select UserID,Latitude, Longitude, text, geom
+from tweets_relational_elections_geo
+union all
+(Select N.UserID,D.Latitude, D.Longitude, N.text, D.geom 
+from tweets_relational_elections_nongeo N
+inner join tweets_relational_elections_geo_distinct D
+on N.UserID = D.UserID
+)) X
+
+select distinct(UserID,text) from tweets_relational_elections_Duplicates
+
+select * from tweets_relational_elections_Duplicates order by latitude
+
+
+SELECT UserID,Latitude,Longitude,text,geom into tweets_relational_elections_geo_final from (
+SELECT UserID, Latitude,Longitude,text,geom, row_number() OVER (PARTITION BY UserID,text ORDER BY text Desc) as rank FROM tweets_relational_elections_Duplicates) Y
+where Y.rank=1
+
+
+select distinct(userID,text) from tweets_relational_elections_geo_final
+
+CREATE INDEX idnx_elections_geom ON tweets_relational_elections_geo_final USING GIST ( geom ); 
+
+--------------------------- KNN Query --------------------------------------------------------
+
+SELECT *,ST_Distance(geom,ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) 
+FROM tweets_relational_elections_geo_final
+ORDER BY
+tweets_relational_elections_geo_final.geom <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
+limit 10;
+
+-------------------------- Range Query --------------------------------------------------------
+
+SELECT *,ST_Distance(geom,ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) 
+FROM tweets_relational_elections_geo_final
+WHERE ST_Distance(geom,ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) < 100000
+ORDER BY
+tweets_relational_elections_geo_final.geom <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
+
+--------------------------- KNN + Textual ----------------------------------------------------
+
+SELECT *,ST_Distance(geom,ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) 
+FROM tweets_relational_elections_geo_final
+WHERE text Ilike '%trump%'
+ORDER BY
+tweets_relational_elections_geo_final.geom <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
+limit 10;
+--------------------------- Range + Textual --------------------------------------------------
+
+SELECT *,ST_Distance(geom,ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) 
+FROM tweets_relational_elections_geo_final
+WHERE ST_Distance(geom,ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) < 100000 and text Ilike '%trump%'
+ORDER BY
+tweets_relational_elections_geo_final.geom <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
+
+---------------------------------------------------------------------------------------------------------------------------------------------------
+--miscellaneous queries for sample testing
+
+SELECT table_schema,table_name FROM information_schema.tables where table_name = 'tweets_relational_elections_geo_final'
+
+SELECT * FROM information_schema.columns where table_name = 'tweets_relational_elections_geo_final'
+
+
+SELECT ST_Distance(
+  ST_GeographyFromText('POINT(-111.9211234 33.4212026 )'), -- Los Angeles (LAX)
+  ST_GeographyFromText('POINT(25.6002326 -33.9363287 )')     -- Paris (CDG)
+  );
+
+--------------------------------------------------------------------------------------------------------------------------------------------------
