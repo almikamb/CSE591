@@ -1,0 +1,314 @@
+------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------Setting up Spatial Database ----------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------
+
+
+CREATE EXTENSION postgis;
+
+CREATE EXTENSION postgis_topology;
+-- Enable PostGIS Advanced 3D 
+-- and other geoprocessing algorithms
+CREATE EXTENSION postgis_sfcgal;
+-- fuzzy matching needed for Tiger
+CREATE EXTENSION fuzzystrmatch;
+-- rule based standardizer
+CREATE EXTENSION address_standardizer;
+-- example rule data set
+CREATE EXTENSION address_standardizer_data_us;
+-- Enable US Tiger Geocoder
+CREATE EXTENSION postgis_tiger_geocoder;
+-- routing functionality
+CREATE EXTENSION pgrouting;
+-- spatial foreign data wrappers
+CREATE EXTENSION ogr_fdw;
+
+-- LIDAR support
+CREATE EXTENSION pointcloud;
+-- LIDAR Point cloud patches to geometry type cases
+CREATE EXTENSION pointcloud_postgis;
+
+
+create table tweets_elections(id SERIAL,tweet json);
+
+create table tweets_elections_nongeo(id SERIAL,tweet json);
+
+copy tweets_elections(tweet) 
+    from 'C:\Program Files (x86)\PostgreSQL\geotagged_elections_tweetsv3.json' 
+    csv quote e'\x01' delimiter e'\x02';
+
+
+copy tweets_elections_nongeo(tweet) 
+    from 'C:\Program Files (x86)\PostgreSQL\all_elections_tweets3.json' 
+    csv quote e'\x01' delimiter e'\x02';
+
+
+copy tweets_elections(tweet) 
+    from 'C:\Program Files (x86)\PostgreSQL\geotagged_elections_tweetsv3.json' 
+    csv quote e'\x01' delimiter e'\x02';
+
+
+copy tweets_elections_nongeo(tweet) 
+    from 'C:\Program Files (x86)\PostgreSQL\all_elections_tweets3.json' 
+    csv quote e'\x01' delimiter e'\x02';
+
+
+-----------------Creating a relation table for geo data from json format---------------------------------------
+
+select cast(UserID as bigint) as UserID,Latitude,Longitude,text 
+into tweets_relational_elections_geo
+from 
+(
+select tweet->'UserID'->>'$numberLong' as UserID ,cast(tweet->>'Latitude' as text) as Latitude,cast(tweet->>'Longitude' as text) as Longitude, cast(tweet->>'Text' as text) as text 
+from tweets_elections
+where tweet->'UserID'->>'$numberLong' is NOT NULL
+Union all
+select tweet->>'UserID' as UserID ,cast(tweet->>'Latitude' as text) as Latitude,cast(tweet->>'Longitude' as text) as Longitude, cast(tweet->>'Text' as text) as text 
+from tweets_elections
+where tweet->>'UserID' not like '{%'
+)X
+
+
+------------- Creating a relational table for non-geo data from json format ----------------------------------
+select cast(UserID as bigint) as UserID,Latitude,Longitude,text 
+into tweets_relational_elections_nongeo
+from 
+(
+select tweet->'UserID'->>'$numberLong' as UserID ,cast(tweet->>'Latitude' as text) as Latitude,cast(tweet->>'Longitude' as text) as Longitude, cast(tweet->>'Text' as text) as text 
+from tweets_elections_nongeo
+where tweet->'UserID'->>'$numberLong' is NOT NULL
+Union all
+select tweet->>'UserID' as UserID ,cast(tweet->>'Latitude' as text) as Latitude,cast(tweet->>'Longitude' as text) as Longitude, cast(tweet->>'Text' as text) as text 
+from tweets_elections_nongeo
+where tweet->>'UserID' not like '{%'
+)X
+
+
+ALTER TABLE tweets_relational_elections_geo
+  ADD COLUMN geom geography(Point,4326); 
+
+UPDATE tweets_relational_elections_geo SET geom = ST_PointFromText ('POINT(' || longitude || ' ' || latitude || ')' , 4326 ) ;
+
+-------------- Creating a temp table with distinct UserID from geo relational table for joining it with non geo table and get location coordinates for rows in non geo table-- 
+
+SELECT UserID,Latitude,Longitude,text,geom into tweets_relational_elections_geo_distinct from (
+SELECT UserID, Latitude,Longitude,text,geom, row_number() OVER (PARTITION BY UserID ORDER BY geom <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography ASC) as rank FROM tweets_relational_elections_geo) Y
+where Y.rank=1
+
+
+---------------- Intermediate table which gives all records with geo location coordinates for
+
+Select UserID, Latitude, Longitude, Text, geom into tweets_relational_elections_Duplicates from(
+Select UserID,Latitude, Longitude, text, geom
+from tweets_relational_elections_geo
+union all
+(Select N.UserID,D.Latitude, D.Longitude, N.text, D.geom 
+from tweets_relational_elections_nongeo N
+inner join tweets_relational_elections_geo_distinct D
+on N.UserID = D.UserID
+)) X
+
+
+SELECT UserID,Latitude,Longitude,text,geom into tweets_relational_elections_geo_final from (
+SELECT UserID, Latitude,Longitude,text,geom, row_number() OVER (PARTITION BY UserID,text ORDER BY text Desc) as rank FROM tweets_relational_elections_Duplicates) Y
+where Y.rank=1
+
+
+-------------------------- Using JSON Datatype and B-Tree Index-------------------------------
+create table tweets_elections_J(ID SERIAL, tweet json);
+
+Insert into tweets_elections_J(tweet) SELECT row_to_json(jg)
+ FROM (SELECT ST_AsGeoJSON(tre.geom)::json As geometry
+    , text as text
+   FROM tweets_relational_elections_geo_final tre)  As jg;
+
+---------------------------------Using JSONB Datatype and GIN Index----------------------------------------------------------------
+
+create table tweets_elections_JB(ID SERIAL, tweet jsonb);
+
+insert into tweets_elections_JB(tweet) SELECT row_to_json(fc)
+ FROM (SELECT ST_AsGeoJSON(tre.geom)::json As geometry
+    , text as text
+   FROM tweets_relational_elections_geo_final tre)  As fc;
+
+------------------------------------------------------------------------------------------------------------------------------------
+---------------------------Indexes Creation on Final Implementations of Relational,JSON and JSONB Tables----------------------------
+------------------------------------------------------------------------------------------------------------------------------------
+
+
+CREATE INDEX idx_elections_text ON tweets_relational_elections_geo_final USING GIN (to_tsvector('english',text));
+
+CREATE INDEX idnx_elections_geom ON tweets_relational_elections_geo_final USING GIST ( geom ); 
+
+
+
+CREATE INDEX idnx_elections_geom_J on tweets_elections_J ((tweet #>> '{geometry,text}'));
+
+CREATE INDEX idnx_elections_geom_JB on tweets_elections_JB USING GIN (tweet);
+
+-------------------------------------------------------------------------------------------------------------------------------------
+--------------------------- KNN,Range and Textual Queries on Different implementations ----------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------------------
+
+-------Relational
+
+-------KNN Query 
+
+Explain Analyze SELECT *,ST_Distance(geom,ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) 
+FROM tweets_relational_elections_geo_final
+ORDER BY
+tweets_relational_elections_geo_final.geom <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
+limit 10;
+
+-------Range Query 
+
+Explain Analyze SELECT *,ST_Distance(geom,ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) 
+FROM tweets_relational_elections_geo_final
+WHERE ST_Distance(geom,ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) < 10000
+
+-------KNN + Textual 
+
+Explain Analyze SELECT * 
+FROM tweets_relational_elections_geo_final
+WHERE text Ilike '%trump%'
+ORDER BY
+tweets_relational_elections_geo_final.geom <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
+limit 10;
+
+---------Range + Textual 
+
+Explain Analyze SELECT *,ST_Distance(geom,ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) 
+FROM tweets_relational_elections_geo_final
+WHERE ST_Distance(geom,ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) < 100000 and to_tsvector('english',text) @@ to_tsquery('trump')
+ORDER BY
+tweets_relational_elections_geo_final.geom <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
+
+---------Textual
+Explain Analyze SELECT *
+FROM tweets_relational_elections_geo_final
+WHERE to_tsvector('english',text) @@ to_tsquery('trump')
+
+
+
+-------------JSON Implementation
+
+------------- KNN Query
+
+SELECT *,ST_Distance(geography(ST_GeomFromGeoJSON(tweet->>'geometry')),ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) 
+FROM tweets_elections_J
+ORDER BY
+geography(ST_GeomFromGeoJSON(tweet->>'geometry')) <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
+limit 10;
+
+--------------Range Query 
+
+SELECT *,ST_Distance(geography(ST_GeomFromGeoJSON(tweet->>'geometry')),ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) 
+FROM tweets_elections_J
+WHERE ST_Distance(geography(ST_GeomFromGeoJSON(tweet->>'geometry')),ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) <100000 
+ORDER BY
+geography(ST_GeomFromGeoJSON(tweet->>'geometry')) <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
+
+
+
+
+---------------KNN + Textual 
+
+SELECT *,ST_Distance(geography(ST_GeomFromGeoJSON(tweet->>'geometry')),ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) 
+FROM tweets_elections_J
+WHERE tweet->>'text' Ilike '%trump%'
+ORDER BY
+geography(ST_GeomFromGeoJSON(tweet->>'geometry')) <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
+limit 10;
+
+
+---------------Range + Textual 
+SELECT *,ST_Distance(geography(ST_GeomFromGeoJSON(tweet->>'geometry')),ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) 
+FROM tweets_elections_J
+WHERE ST_Distance(geography(ST_GeomFromGeoJSON(tweet->>'geometry')),ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) <100000 
+AND tweet->>'text' Ilike '%trump%'
+ORDER BY
+geography(ST_GeomFromGeoJSON(tweet->>'geometry')) <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
+
+
+--------------- Textual
+Explain Analyze SELECT *
+FROM tweets_elections_J
+WHERE tweet->>'text' Ilike '%trump%'
+LIMIT 2000
+
+
+
+-----------JSONB Implementation
+
+-----------KNN Query 
+
+SELECT *,ST_Distance(geography(ST_GeomFromGeoJSON(tweet->>'geometry')),ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) 
+FROM tweets_elections_JB
+ORDER BY
+geography(ST_GeomFromGeoJSON(tweet->>'geometry')) <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
+limit 10;
+
+-----------Range Query 
+
+SELECT *,ST_Distance(geography(ST_GeomFromGeoJSON(tweet->>'geometry')),ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) 
+FROM tweets_elections_JB
+WHERE ST_Distance(geography(ST_GeomFromGeoJSON(tweet->>'geometry')),ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) <100000 
+ORDER BY
+geography(ST_GeomFromGeoJSON(tweet->>'geometry')) <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
+
+-----------KNN + Textual 
+
+SELECT *,ST_Distance(geography(ST_GeomFromGeoJSON(tweet->>'geometry')),ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) 
+FROM tweets_elections_JB
+WHERE tweet->>'text' Ilike '%trump%'
+ORDER BY
+geography(ST_GeomFromGeoJSON(tweet->>'geometry')) <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
+limit 10;
+
+-----------Range + Textual 
+
+SELECT *,ST_Distance(geography(ST_GeomFromGeoJSON(tweet->>'geometry')),ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) 
+FROM tweets_elections_JB
+WHERE ST_Distance(geography(ST_GeomFromGeoJSON(tweet->>'geometry')),ST_GeographyFromText('POINT(-111.9211234 33.4212026)')) <10000000 
+AND tweet->>'text' Ilike '%trump%'
+ORDER BY
+geography(ST_GeomFromGeoJSON(tweet->>'geometry')) <->'SRID=4326;POINT(-111.9211234 33.4212026 )'::geography
+
+-----------Textual
+SELECT * 
+FROM tweets_elections_JB
+WHERE tweet->'text' Ilike '%trump'
+LIMIT 2000
+
+
+-------------------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------Analysis Queries--------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------------------
+
+---Query to find the disk space of Relational, JSON and JSONB implementations
+
+
+SELECT nspname || '.' || relname AS "relation",
+    pg_size_pretty(pg_relation_size(C.oid)) AS "size"
+  FROM pg_class C
+  LEFT JOIN pg_namespace N ON (N.oid = C.relnamespace)
+  WHERE nspname NOT IN ('pg_catalog', 'information_schema')
+  ORDER BY pg_relation_size(C.oid) DESC
+  LIMIT 20;
+
+--Query to find disk space of indexes
+
+SELECT pg_size_pretty(pg_relation_size('idx_elections_text'::regclass))
+    AS json_index;
+
+SELECT pg_size_pretty(pg_relation_size('idnx_elections_geom'::regclass))
+    AS json_index;
+
+SELECT pg_size_pretty(pg_relation_size('idnx_elections_geom_J'::regclass))
+    AS json_index;
+
+SELECT pg_size_pretty(pg_relation_size('idnx_elections_geom_JB'::regclass))
+    AS json_index;
+
+
+--Used Query Analyze for getting execution plans of queries.
+    
