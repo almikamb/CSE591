@@ -61,12 +61,7 @@ public class Main {
 			}
 
 			public void constructTweet(Status status) {
-				// make sure that is not Retweet and the tweet in English
-				// !status.isRetweet() &&
-				// status.getLang().equals("en")
-				// if (status.getGeoLocation() != null) {
-				// if (status.isRetweet()) {
-				// if (status.getUserMentionEntities().length > 0) {
+				
 				numTweet++;
 				JSONObject objTweet = new JSONObject();
 				try {
@@ -228,11 +223,7 @@ public class Main {
 				URLEntity urls[] = status.getURLEntities();
 				// create a thread and get the title of the URLs
 				URLThread t = null;
-				/*
-				 * if (urls.length != 0) { t = new URLThread("ThURL1", urls,
-				 * objTweet, F); tList.add(t); t.start(); } else // the Tweet
-				 * JSON has no URLs, save into the file {
-				 */
+			
 				saveTweets(objTweet.toString(), F);
 				// }
 
@@ -247,15 +238,7 @@ public class Main {
 					constructTweet(status.getQuotedStatus());
 				}
 
-				// check if # tweets reach specified argument 1
-				/*
-				 * if (arg1 == numTweet) { // loop and wait for all threads for
-				 * (URLThread thread : tList) { // only wait if thread is still
-				 * running if (thread.isAlive()) thread.join(); }
-				 * System.out.println("It's been collected "+numTweet+ " Tweets"
-				 * ); System.exit(0); }
-				 */
-				// }
+				
 			}
 
 			public void onDeletionNotice(StatusDeletionNotice statusDeletionNotice) {
@@ -303,8 +286,6 @@ public class Main {
 		FilterQuery filter = new FilterQuery();
 		filter.locations(boundingBox);
 
-		// twitterStream.addListener(listener);
-		// twitterStream.filter(filter);
 		FilterQuery fq = new FilterQuery();
 		String keywords[] = { "" };
 

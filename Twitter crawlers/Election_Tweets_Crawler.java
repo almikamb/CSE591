@@ -62,21 +62,12 @@ public class Election_Tweets_Crawler {
 			}
 
 			public void constructTweet(Status status) {
-				// make sure that is not Retweet and the tweet in English
-				// !status.isRetweet() &&
-				// status.getLang().equals("en")
-				// if (status.getGeoLocation() != null) {
-				// if (status.isRetweet()) {
-				// if (status.getUserMentionEntities().length > 0) {
+				
 				numTweet++;
 				JSONObject objTweet = new JSONObject();
 				try {
 
-					// objTweet.put("RetweetedStatusChainInfo",
-					// status.getRetweetedStatus());
-
-					// user profile info:
-					//if (status.getGeoLocation() != null) {
+					
 
 						objTweet.put("UserScreenName", status.getUser().getScreenName());
 						objTweet.put("UserName", status.getUser().getName());
@@ -232,13 +223,9 @@ public class Election_Tweets_Crawler {
 				URLEntity urls[] = status.getURLEntities();
 				// create a thread and get the title of the URLs
 				URLThread t = null;
-				/*
-				 * if (urls.length != 0) { t = new URLThread("ThURL1", urls,
-				 * objTweet, F); tList.add(t); t.start(); } else // the Tweet
-				 * JSON has no URLs, save into the file {
-				 */
+		
 				saveTweets(objTweet.toString(), F);
-				// }
+				
 
 				// if it is a retweet, go get the retweeted statues and store it
 				if (status.isRetweet()) {
@@ -246,20 +233,12 @@ public class Election_Tweets_Crawler {
 				}
 
 				// if it is a quoted tweet, go get the quoted statues and store
-				// it
+				
 				if (status.getQuotedStatus() != null) {
 					constructTweet(status.getQuotedStatus());
 				}
 
-				// check if # tweets reach specified argument 1
-				/*
-				 * if (arg1 == numTweet) { // loop and wait for all threads for
-				 * (URLThread thread : tList) { // only wait if thread is still
-				 * running if (thread.isAlive()) thread.join(); }
-				 * System.out.println("It's been collected "+numTweet+ " Tweets"
-				 * ); System.exit(0); }
-				 */
-				// }
+				
 			}
 
 			public void onDeletionNotice(StatusDeletionNotice statusDeletionNotice) {
@@ -303,20 +282,16 @@ public class Election_Tweets_Crawler {
 		};
 
 		double[][] boundingBox = { { -125.0011, 24.9493}, { -66.9326, 49.5904  } }; /// The US
-		//FilterQuery filter = new FilterQuery();
-		//filter.locations(boundingBox);
-
+		
 		twitterStream.addListener(listener);
-		// twitterStream.filter(filter);
 		FilterQuery fq = new FilterQuery();
 		String keywords[] = { "election","vote", "Cruz", "Trump", "Sanders", "Clinton", "Campaigns", "Sen " , "elections", "democratic",
 							"republic"};
 		fq.track(keywords);
 		fq.language("en");
-		//fq.locations(boundingBox);
+		
 		twitterStream.filter(fq);
-		//twitterStream.addListener(listener);
-		//twitterStream.sample();
+		
 	}
 }
 

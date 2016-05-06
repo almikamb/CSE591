@@ -5,7 +5,7 @@ this script is for importing the JSON files to MongoDB:
 @echo off
 @echo %time%
 
-for %f in (C:\Users\malmukay\workspace\Test\Elections_Data\*.json) do (
+for %f in ([folder path]) do (
 mongoimport --host localhost:27017 --db elections2 --collection tweets < %f
 
 )
