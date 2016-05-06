@@ -1,0 +1,137 @@
+package sample;
+
+import java.awt.EventQueue;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+
+import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
+
+import org.openstreetmap.gui.jmapviewer.JMapViewer;
+import javax.swing.JLabel;
+import javax.swing.JTextField;
+
+public class Trump {
+
+	private JFrame frame;
+	private JTextField textField;
+
+	/**
+	 * Launch the application.
+	 */
+	public static void main(String[] args) {
+		EventQueue.invokeLater(new Runnable() {
+			public void run() {
+				try {
+					Trump window = new Trump();
+					window.frame.setVisible(true);
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+		});
+	}
+
+	/**
+	 * Create the application.
+	 */
+	public Trump() {
+		initialize();
+	}
+
+	/**
+	 * Initialize the contents of the frame.
+	 */
+	private void initialize() {
+		frame = new JFrame();
+		frame.setBounds(100, 100, 1203, 798);
+		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		frame.setExtendedState(JFrame.MAXIMIZED_BOTH);
+		frame.getContentPane().setLayout(null);
+		
+		JMapViewer panel=new JMapViewer();
+		panel.setBounds(15, 13, 1872, 689);
+		
+		frame.getContentPane().add(panel);
+		
+		
+		
+		JScrollPane scrollPane = new JScrollPane();
+		scrollPane.setBounds(15, 753, 1872, 400);
+		frame.getContentPane().add(scrollPane);
+		
+		JTextArea textArea = new JTextArea();
+		scrollPane.setViewportView(textArea);
+		
+		JButton btnGetPosition = new JButton("Get Position");
+		btnGetPosition.setBounds(1046, 712, 117, 25);
+		frame.getContentPane().add(btnGetPosition);
+		
+		JLabel lblEnterTheRange = new JLabel("Enter the range:");
+		lblEnterTheRange.setBounds(597, 717, 128, 20);
+		frame.getContentPane().add(lblEnterTheRange);
+		
+		textField = new JTextField();
+		textField.setBounds(740, 711, 146, 26);
+		frame.getContentPane().add(textField);
+		textField.setColumns(10);
+		
+		btnGetPosition.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent arg0) {
+				System.out.println(panel.getPosition());
+				String s=new String(panel.getPosition().toString().substring(11,panel.getPosition().toString().length()-1));
+				String range=textField.getText();
+				System.out.println(s);
+				String coord[]=s.split(",");
+				coord[1]=coord[1].trim();
+				System.out.println(coord[0]);
+				System.out.println(coord[1]);
+				try {
+					Class.forName("org.postgresql.Driver");
+					Connection c = DriverManager
+					            .getConnection("jdbc:postgresql://localhost:5432/Twitter",
+					            "postgres", "password-1");
+
+					String query3=new String("select *,ST_Distance(geom,ST_GeographyFromText('POINT("+coord[1]+" "+
+					 coord[0]+")')) from tweets_relational_elections_geo_final where text Ilike '%trump%' order by tweets_relational_elections_geo_final.geom <->'SRID=4326;POINT("+coord[1]+" "+
+					 coord[0]+")':: geography limit 10");
+					String query=new String("select count(1) as Tweets_on_Trump from tweets_relational_elections_geo_final where ST_Distance(geom,ST_GeographyFromText('POINT("+coord[1]+" "+
+							 coord[0]+")'))< "+range+" and text Ilike '%trump%' ");
+					
+					String query1=new String("select count(1) as Tweets_on_elections from tweets_relational_elections_geo_final where ST_Distance(geom,ST_GeographyFromText('POINT("+coord[1]+" "+
+							 coord[0]+")'))< "+range);
+		
+					System.out.println(query3);		
+//					System.out.println(query);		
+//					System.out.println(query1);		
+					
+					Statement stmt=c.createStatement();
+					ResultSet rs=stmt.executeQuery(query);
+					textArea.setText("");
+					while(rs.next()){
+						textArea.append("Tweets about Trump: "+rs.getString("Tweets_on_Trump")+"\n");
+					}
+					ResultSet rs1=stmt.executeQuery(query1);
+					while(rs1.next()){
+						textArea.append("Tweets about Elections:"+rs1.getString("Tweets_on_elections")+"\n");
+					}
+					ResultSet rs2=stmt.executeQuery(query3);
+					textArea.append("Top 10 Tweets about Trump:\n");
+					while(rs2.next()){
+						textArea.append(rs2.getString("text")+"\n");
+					}
+				} catch (ClassNotFoundException | SQLException e) {
+					e.printStackTrace();
+				}
+		       
+			}
+		});
+	}
+}
